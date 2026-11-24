@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Document Chatbot Demo</title>
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; margin: 0; background: #f3f6fa; color: #17283b; }
+  main { width: min(44rem, calc(100% - 2rem)); margin: 4rem auto; }
+  form { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+  label { width: 100%; font-weight: 650; }
+  input, button { font: inherit; padding: .65rem .85rem; border-radius: .45rem; }
+  input { flex: 1 1 12rem; min-width: 0; border: 1px solid #74849a; background: #fff; color: #17283b; }
+  button { border: 0; background: #18476f; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: wait; }
+  #answer { background: #fff; border-radius: .5rem; padding: 1rem; margin-top: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #sources { padding-left: 1.4rem; }
+  a { color: #18476f; }
+</style>
+<main>
+  <h1>Document Chatbot Demo</h1>
+  <p>Ask about the fictional L120 desk lamp.</p>
+  <form>
+    <label for="question">Question</label>
+    <input id="question" maxlength="500" placeholder="How long is the warranty?" required>
+    <button>Ask</button>
+  </form>
+  <div id="answer" role="status" hidden></div>
+  <ul id="sources" aria-label="Sources"></ul>
+  <a href="/docs">API documentation</a>
+</main>
+<script>
+  const form = document.querySelector("form");
+  const question = document.querySelector("#question");
+  const button = form.querySelector("button");
+  const answer = document.querySelector("#answer");
+  const sources = document.querySelector("#sources");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = question.value.trim();
+    if (!message || button.disabled) return;
+    button.disabled = true;
+    answer.hidden = false;
+    answer.textContent = "Searching documents…";
+    sources.replaceChildren();
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      if (!response.ok) throw new Error("Request failed");
+      const result = await response.json();
+      answer.textContent = result.message;
+      for (const source of result.sources) {
+        const item = document.createElement("li");
+        item.textContent = [source.title, source.page && "p. " + source.page, source.section].filter(Boolean).join(" · ");
+        sources.append(item);
+      }
+    } catch {
+      answer.textContent = "Couldn't get a reply. Please try again shortly.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>
+</html>
