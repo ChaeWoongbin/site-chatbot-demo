@@ -12,6 +12,13 @@ def test_sample_answer_without_api_key(tmp_path):
         assert result["type"] == "excerpt"
         assert "two-year warranty" in result["message"]
         assert result["sources"][0]["title"] == "L120 Desk Lamp"
+        ko = client.post("/api/chat", json={"message": "보증기간은 얼마인가요?", "language": "ko"}).json()
+        assert ko["type"] == "excerpt"
+        assert "보증기간은 2년" in ko["message"]
+        assert ko["sources"][0]["title"] == "L120 책상 조명"
+        missing = client.post("/api/chat", json={"message": "천체사진", "language": "ko"}).json()
+        assert missing["message"] == "자료에서 관련 내용을 찾을 수 없습니다."
+        assert client.post("/api/chat", json={"message": "Warranty", "language": "fr"}).status_code == 422
         assert client.post("/api/chat", json={"message": "    "}).status_code == 422
         assert client.post("/api/chat", json={"message": "astrophotography"}).json()["type"] == "no_match"
 

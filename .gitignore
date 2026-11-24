@@ -18,12 +18,14 @@
 !/examples/
 /examples/*
 !/examples/desk-lamp.md
+!/examples/desk-lamp.ko.md
 !/static/
 /static/*
 !/static/index.html
 !/docs/
 /docs/*
 !/docs/demo-screen.jpg
+!/docs/demo-screen-ko.jpg
 !/tests/
 /tests/*
 !/tests/test_demo.py

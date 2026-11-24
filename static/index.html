@@ -1,11 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Document Chatbot Demo</title>
+<title>문서 챗봇 데모</title>
 <style>
   body { font: 16px/1.6 system-ui, sans-serif; margin: 0; background: #f3f6fa; color: #17283b; }
   main { width: min(44rem, calc(100% - 2rem)); margin: 4rem auto; }
+  header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem 1rem; margin-bottom: .75rem; }
+  h1 { margin: 0; }
+  select { font: inherit; color: inherit; background: #fff; border: 1px solid #74849a; border-radius: .45rem; padding: .4rem .5rem; }
   form { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
   label { width: 100%; font-weight: 650; }
   input, button { font: inherit; padding: .65rem .85rem; border-radius: .45rem; }
@@ -14,52 +17,116 @@
   button:disabled { opacity: .6; cursor: wait; }
   #answer { background: #fff; border-radius: .5rem; padding: 1rem; margin-top: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
   #sources { padding-left: 1.4rem; }
+  #result-type, #sources-label { margin-bottom: 0; font-size: .9rem; font-weight: 650; }
+  #result-type + #answer { margin-top: .35rem; }
   a { color: #18476f; }
 </style>
 <main>
-  <h1>Document Chatbot Demo</h1>
-  <p>Ask about the fictional L120 desk lamp.</p>
+  <header>
+    <h1 id="heading">문서 챗봇 데모</h1>
+    <select id="language" aria-label="언어 선택">
+      <option value="ko" lang="ko">한국어</option>
+      <option value="en" lang="en">English</option>
+    </select>
+  </header>
+  <p id="intro">가상의 L120 책상 조명에 대해 물어보세요.</p>
   <form>
-    <label for="question">Question</label>
-    <input id="question" maxlength="500" placeholder="How long is the warranty?" required>
-    <button>Ask</button>
+    <label for="question">질문</label>
+    <input id="question" maxlength="500" placeholder="보증기간은 얼마인가요?" required>
+    <button>질문하기</button>
   </form>
+  <p id="result-type" hidden></p>
   <div id="answer" role="status" hidden></div>
-  <ul id="sources" aria-label="Sources"></ul>
-  <a href="/docs">API documentation</a>
+  <p id="sources-label" hidden>출처</p>
+  <ul id="sources" aria-labelledby="sources-label" hidden></ul>
+  <a id="api-docs" href="/docs">API 문서</a>
 </main>
 <script>
+  const copy = {
+    ko: {
+      title: "문서 챗봇 데모", language: "언어 선택", intro: "가상의 L120 책상 조명에 대해 물어보세요.",
+      question: "질문", placeholder: "보증기간은 얼마인가요?", ask: "질문하기", docs: "API 문서",
+      searching: "자료를 찾고 있습니다…", failed: "답변을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      excerpt: "자료 발췌", generated: "AI 답변", sources: "출처", page: number => number + "쪽",
+    },
+    en: {
+      title: "Document Chatbot Demo", language: "Choose language", intro: "Ask about the fictional L120 desk lamp.",
+      question: "Question", placeholder: "How long is the warranty?", ask: "Ask", docs: "API documentation",
+      searching: "Searching documents…", failed: "Couldn't get a reply. Please try again shortly.",
+      excerpt: "Source excerpt", generated: "AI answer", sources: "Sources", page: number => "p. " + number,
+    },
+  };
   const form = document.querySelector("form");
   const question = document.querySelector("#question");
   const button = form.querySelector("button");
+  const language = document.querySelector("#language");
   const answer = document.querySelector("#answer");
+  const resultType = document.querySelector("#result-type");
+  const sourcesLabel = document.querySelector("#sources-label");
   const sources = document.querySelector("#sources");
+  const storageKey = "document-demo-language";
+  let saved;
+  try { saved = localStorage.getItem(storageKey); } catch {}
+  const supported = value => value === "ko" || value === "en";
+  const preferred = (navigator.languages?.length ? navigator.languages : [navigator.language || "en"])
+    .map(value => value.split("-")[0].toLowerCase()).find(supported);
+  language.value = supported(saved) ? saved : preferred || "en";
+
+  function showLanguage() {
+    const t = copy[language.value];
+    document.documentElement.lang = language.value;
+    document.title = t.title;
+    language.setAttribute("aria-label", t.language);
+    document.querySelector("#heading").textContent = t.title;
+    document.querySelector("#intro").textContent = t.intro;
+    form.querySelector("label").textContent = t.question;
+    question.placeholder = t.placeholder;
+    button.textContent = t.ask;
+    document.querySelector("#api-docs").textContent = t.docs;
+    sourcesLabel.textContent = t.sources;
+    answer.hidden = resultType.hidden = sourcesLabel.hidden = sources.hidden = true;
+  }
+  language.addEventListener("change", () => {
+    try { localStorage.setItem(storageKey, language.value); } catch {}
+    showLanguage();
+  });
+  showLanguage();
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = question.value.trim();
     if (!message || button.disabled) return;
-    button.disabled = true;
+    const t = copy[language.value];
+    button.disabled = language.disabled = true;
     answer.hidden = false;
-    answer.textContent = "Searching documents…";
+    answer.textContent = t.searching;
+    resultType.hidden = sourcesLabel.hidden = sources.hidden = true;
     sources.replaceChildren();
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, language: language.value }),
       });
       if (!response.ok) throw new Error("Request failed");
       const result = await response.json();
-      answer.textContent = result.message;
+      answer.textContent = result.type === "excerpt" && result.sources[0]?.section
+        ? result.message.replace(/^#{1,6} [^\n]+\n+/, "")
+        : result.message;
+      if (result.type === "excerpt" || result.type === "generated") {
+        resultType.textContent = t[result.type];
+        resultType.hidden = false;
+      }
       for (const source of result.sources) {
         const item = document.createElement("li");
-        item.textContent = [source.title, source.page && "p. " + source.page, source.section].filter(Boolean).join(" · ");
+        item.textContent = [source.title, source.page && t.page(source.page), source.section].filter(Boolean).join(" · ");
         sources.append(item);
       }
+      sourcesLabel.hidden = sources.hidden = result.sources.length === 0;
     } catch {
-      answer.textContent = "Couldn't get a reply. Please try again shortly.";
+      answer.textContent = t.failed;
     } finally {
-      button.disabled = false;
+      button.disabled = language.disabled = false;
     }
   });
 </script>
